@@ -1,0 +1,1550 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cotizador de Transporte</title>
+
+  <!-- SheetJS para leer Excel -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    /* =========================================================
+       VARIABLES Y RESET
+    ========================================================= */
+    :root {
+      --bg:           #0c0f14;
+      --surface:      #141820;
+      --surface-2:    #1c2230;
+      --border:       #252d3a;
+      --border-light: #2e3a4e;
+      --accent:       #00e5a0;
+      --accent-dim:   rgba(0,229,160,.12);
+      --accent-glow:  rgba(0,229,160,.35);
+      --warn:         #ff6b35;
+      --text-1:       #e8edf5;
+      --text-2:       #8a96a8;
+      --text-3:       #4d5a6e;
+      --mono:         'DM Mono', monospace;
+      --sans:         'DM Sans', sans-serif;
+      --display:      'Syne', sans-serif;
+      --radius:       10px;
+      --radius-lg:    16px;
+      --transition:   .2s cubic-bezier(.4,0,.2,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text-1);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+      /* Fondo con patrón de puntos */
+      background-image:
+        radial-gradient(circle at 20% 10%, rgba(0,229,160,.05) 0%, transparent 40%),
+        radial-gradient(circle at 80% 80%, rgba(0,229,160,.04) 0%, transparent 35%),
+        radial-gradient(var(--border) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 28px 28px;
+    }
+
+    /* =========================================================
+       LAYOUT
+    ========================================================= */
+    .wrapper {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+
+    /* =========================================================
+       HEADER
+    ========================================================= */
+    .app-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+    .header-icon {
+      width: 52px; height: 52px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+      border-radius: var(--radius);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .header-icon::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, var(--accent-glow), transparent);
+      opacity: .4;
+    }
+    .header-icon svg { position: relative; z-index: 1; }
+    .header-text h1 {
+      font-family: var(--display);
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -.4px;
+      color: var(--text-1);
+      line-height: 1.2;
+    }
+    .header-text p {
+      color: var(--text-2);
+      font-size: 13px;
+      margin-top: 4px;
+    }
+    .badge-version {
+      display: inline-block;
+      background: var(--accent-dim);
+      color: var(--accent);
+      border: 1px solid var(--accent-glow);
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      letter-spacing: .5px;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    /* =========================================================
+       CARD
+    ========================================================= */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .card + .card { margin-top: 20px; }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-2);
+    }
+    .card-header-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent-glow);
+    }
+    .card-header h2 {
+      font-family: var(--display);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .6px;
+      text-transform: uppercase;
+      color: var(--text-2);
+    }
+    .card-body { padding: 24px; }
+
+    /* =========================================================
+       UPLOAD ZONE
+    ========================================================= */
+    .upload-zone {
+      border: 1.5px dashed var(--border-light);
+      border-radius: var(--radius);
+      padding: 32px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: var(--transition);
+      position: relative;
+      background: var(--surface-2);
+    }
+    .upload-zone:hover,
+    .upload-zone.drag-over {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+    }
+    .upload-zone input[type="file"] {
+      position: absolute; inset: 0;
+      opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    }
+    .upload-icon {
+      width: 44px; height: 44px;
+      background: var(--accent-dim);
+      border: 1px solid var(--border-light);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 12px;
+      transition: var(--transition);
+    }
+    .upload-zone:hover .upload-icon { border-color: var(--accent); }
+    .upload-title {
+      font-family: var(--display);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-1);
+    }
+    .upload-sub {
+      font-size: 12px;
+      color: var(--text-3);
+      margin-top: 4px;
+    }
+
+    /* Estado cargado */
+    .upload-loaded {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      margin-top: 12px;
+    }
+    .upload-loaded svg { flex-shrink: 0; }
+    .upload-loaded-name {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--accent);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .upload-loaded-meta {
+      font-size: 11px; color: var(--text-3); margin-top: 2px;
+    }
+    .btn-recargar {
+      margin-left: auto;
+      background: transparent;
+      border: 1px solid var(--border-light);
+      color: var(--text-2);
+      font-size: 11px; font-family: var(--mono);
+      padding: 5px 10px; border-radius: 6px; cursor: pointer;
+      transition: var(--transition); flex-shrink: 0;
+    }
+    .btn-recargar:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* =========================================================
+       FORMULARIO
+    ========================================================= */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group.span-2 { grid-column: 1 / -1; }
+
+    label {
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--text-3);
+      font-family: var(--mono);
+    }
+
+    select, input[type="number"] {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text-1);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      font-size: 13px;
+      font-family: var(--sans);
+      width: 100%;
+      transition: var(--transition);
+      appearance: none;
+      outline: none;
+    }
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%234d5a6e' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+      cursor: pointer;
+    }
+    select:focus, input[type="number"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+    select:disabled, input[type="number"]:disabled {
+      opacity: .4; cursor: not-allowed;
+    }
+    select option { background: var(--surface-2); color: var(--text-1); }
+
+    /* Distribución row */
+    .dist-row {
+      display: none;
+      grid-column: 1 / -1;
+    }
+    .dist-row.visible { display: flex; gap: 16px; }
+    .dist-row .form-group { flex: 1; }
+
+    /* =========================================================
+       BOTÓN CALCULAR
+    ========================================================= */
+    .btn-calcular {
+      width: 100%;
+      background: var(--accent);
+      color: #041510;
+      border: none;
+      border-radius: var(--radius);
+      padding: 14px;
+      font-family: var(--display);
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: .3px;
+      cursor: pointer;
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .btn-calcular::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent);
+      transform: translateX(-100%);
+      transition: transform .5s ease;
+    }
+    .btn-calcular:hover::before { transform: translateX(100%); }
+    .btn-calcular:hover {
+      box-shadow: 0 0 24px var(--accent-glow);
+      transform: translateY(-1px);
+    }
+    .btn-calcular:active { transform: translateY(0); }
+    .btn-calcular:disabled {
+      opacity: .4; cursor: not-allowed; transform: none;
+    }
+
+    /* =========================================================
+       RESULTADO
+    ========================================================= */
+    #resultado-card { display: none; }
+    #resultado-card.visible { display: block; }
+
+    .result-ok { }
+    .result-error { }
+
+    /* Resultado exitoso */
+    .result-main {
+      display: flex; align-items: flex-start; gap: 24px;
+      flex-wrap: wrap;
+    }
+    .result-tarifa-block {
+      flex: 0 0 auto;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-glow);
+      border-radius: var(--radius-lg);
+      padding: 24px 32px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .result-tarifa-block::before {
+      content: '';
+      position: absolute; top: -20px; right: -20px;
+      width: 80px; height: 80px;
+      background: var(--accent-glow);
+      border-radius: 50%;
+      filter: blur(30px);
+    }
+    .result-tarifa-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--accent);
+      opacity: .7;
+      margin-bottom: 6px;
+    }
+    .result-tarifa-value {
+      font-family: var(--display);
+      font-size: 36px;
+      font-weight: 800;
+      color: var(--accent);
+      line-height: 1;
+      letter-spacing: -1px;
+      position: relative; z-index: 1;
+      text-shadow: 0 0 40px var(--accent-glow);
+    }
+    .result-tarifa-currency {
+      font-size: 18px; vertical-align: super; margin-right: 2px;
+    }
+
+    .result-details { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 12px; }
+    .result-detail-item {
+      display: flex; flex-direction: column; gap: 3px;
+    }
+    .result-detail-label {
+      font-family: var(--mono);
+      font-size: 10px; letter-spacing: .8px; text-transform: uppercase;
+      color: var(--text-3);
+    }
+    .result-detail-value {
+      font-size: 14px; color: var(--text-1); font-weight: 500;
+    }
+
+    .result-combo {
+      margin-top: 20px;
+      padding: 14px 18px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .combo-label {
+      font-family: var(--mono); font-size: 10px; letter-spacing: .7px;
+      text-transform: uppercase; color: var(--text-3);
+      flex-shrink: 0;
+    }
+    .combo-value {
+      font-family: var(--mono); font-size: 13px; color: var(--text-1);
+    }
+    .combo-sep {
+      color: var(--text-3);
+      margin: 0 2px;
+    }
+
+    /* Error */
+    .result-error-box {
+      display: flex; align-items: flex-start; gap: 14px;
+      background: rgba(255,107,53,.08);
+      border: 1px solid rgba(255,107,53,.3);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .result-error-box svg { flex-shrink: 0; margin-top: 1px; }
+    .result-error-title {
+      font-family: var(--display); font-size: 15px; font-weight: 700;
+      color: var(--warn);
+    }
+    .result-error-sub {
+      font-size: 12px; color: var(--text-2); margin-top: 4px;
+    }
+
+    /* =========================================================
+       SEPARADOR
+    ========================================================= */
+    .section-sep {
+      height: 1px; background: var(--border);
+      margin: 20px 0;
+    }
+
+    /* =========================================================
+       ESTADO DEL ARCHIVO
+    ========================================================= */
+    .file-status-bar {
+      display: none;
+      align-items: center; gap: 8px;
+      padding: 10px 14px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-top: 12px;
+      font-size: 12px; color: var(--text-2);
+      font-family: var(--mono);
+    }
+    .file-status-bar.visible { display: flex; }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent-glow);
+      flex-shrink: 0;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; } 50% { opacity: .4; }
+    }
+
+    /* =========================================================
+       RANGOS DE PESO CHIPS
+    ========================================================= */
+    .kilos-hint {
+      font-size: 11px; color: var(--text-3); margin-top: 4px;
+      font-family: var(--mono);
+    }
+
+    /* =========================================================
+       RESPONSIVE
+    ========================================================= */
+    @media (max-width: 600px) {
+      .form-grid { grid-template-columns: 1fr; }
+      .dist-row.visible { flex-direction: column; }
+      .result-main { flex-direction: column; }
+      .result-tarifa-block { width: 100%; }
+    }
+
+    /* =========================================================
+       ANIMACIÓN ENTRADA
+    ========================================================= */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .card { animation: fadeUp .4s ease both; }
+    .card:nth-child(2) { animation-delay: .08s; }
+    .card:nth-child(3) { animation-delay: .16s; }
+
+    /* =========================================================
+       TOOLTIP
+    ========================================================= */
+    .tooltip {
+      position: relative; display: inline-block;
+      cursor: help; color: var(--text-3); margin-left: 4px;
+    }
+    .tooltip-text {
+      display: none;
+      position: absolute; bottom: 125%; left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface-2); border: 1px solid var(--border);
+      color: var(--text-2); font-size: 11px; font-family: var(--sans);
+      padding: 6px 10px; border-radius: 6px; white-space: nowrap; z-index: 10;
+    }
+    .tooltip:hover .tooltip-text { display: block; }
+
+    /* =========================================================
+       PAQUETIZADOS - CHECKBOX Y DIMENSIONES
+    ========================================================= */
+    .checkbox-label {
+      display: flex; align-items: center; gap: 8px;
+      cursor: pointer; font-size: 13px; color: var(--text-1);
+      font-weight: 500;
+    }
+    .checkbox-label input[type="checkbox"] {
+      width: 18px; height: 18px; cursor: pointer;
+      accent-color: var(--accent);
+    }
+
+    #dimensiones-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+      transition: var(--transition);
+    }
+    #dimensiones-container.dimensiones-hidden {
+      display: none;
+    }
+
+    #paquetizados-resultados {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+      margin-top: 12px;
+      transition: var(--transition);
+    }
+    #paquetizados-resultados.paquetizados-hidden {
+      display: none;
+    }
+
+    .readonly-field {
+      display: flex; flex-direction: column; gap: 6px;
+      background: var(--surface-2);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+    }
+    .readonly-field label {
+      font-size: 11px; font-weight: 500;
+      text-transform: uppercase; letter-spacing: .6px;
+      color: var(--text-3); font-family: var(--mono);
+    }
+    .readonly-value {
+      font-size: 16px; font-weight: 600; color: var(--accent);
+      font-family: var(--mono); letter-spacing: .2px;
+    }
+
+    /* =========================================================
+       FOOTER
+    ========================================================= */
+    .app-footer {
+      text-align: center; margin-top: 48px;
+      font-size: 11px; color: var(--text-3);
+      font-family: var(--mono); letter-spacing: .4px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="wrapper">
+
+  <!-- ── HEADER ─────────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="header-icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+           stroke="#00e5a0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="1" y="3" width="15" height="13" rx="1"/>
+        <path d="M16 8h4l3 5v4h-7V8z"/>
+        <circle cx="5.5" cy="18.5" r="2.5"/>
+        <circle cx="18.5" cy="18.5" r="2.5"/>
+      </svg>
+    </div>
+    <div class="header-text">
+      <h1>Cotizador de Transporte <span class="badge-version">v1.0</span></h1>
+      <p>Herramienta de cotización logística · Cargá tu Excel y calculá tarifas al instante</p>
+    </div>
+  </header>
+
+  <!-- ── CARD 1: CARGAR ARCHIVO ─────────────────────────── -->
+  <div class="card" id="card-upload">
+    <div class="card-header">
+      <div class="card-header-dot"></div>
+      <h2>Fuente de tarifas</h2>
+    </div>
+    <div class="card-body">
+      <!-- Zona de drag & drop -->
+      <div class="upload-zone" id="upload-zone">
+        <input type="file" id="file-input" accept=".xlsx,.xls" />
+        <div class="upload-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+               stroke="#00e5a0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="12" y1="18" x2="12" y2="12"/>
+            <polyline points="9 15 12 12 15 15"/>
+          </svg>
+        </div>
+        <div class="upload-title">Arrastrá o hacé clic para cargar el Excel</div>
+        <div class="upload-sub">Formatos soportados: .xlsx · .xls</div>
+      </div>
+
+      <!-- Info del archivo cargado -->
+      <div class="upload-loaded" id="upload-loaded" style="display:none;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+             stroke="#00e5a0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <div>
+          <div class="upload-loaded-name" id="upload-filename">archivo.xlsx</div>
+          <div class="upload-loaded-meta" id="upload-meta">0 filas · 0 columnas</div>
+        </div>
+        <button class="btn-recargar" onclick="resetFile()">↺ Cambiar</button>
+      </div>
+
+      <!-- Barra de estado -->
+      <div class="file-status-bar" id="file-status-bar">
+        <div class="status-dot"></div>
+        <span id="file-status-text">Archivo cargado y listo</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CARD 2: DATOS DE ENTRADA ───────────────────────── -->
+  <div class="card" id="card-form">
+    <div class="card-header">
+      <div class="card-header-dot"></div>
+      <h2>Parámetros de cotización</h2>
+    </div>
+    <div class="card-body">
+      <div class="form-grid">
+
+        <!-- Tipo Origen -->
+        <div class="form-group">
+          <label for="sel-tipo-origen">Tipo / Región de Origen</label>
+          <select id="sel-tipo-origen" disabled>
+            <option value="">— Cargá un Excel primero —</option>
+          </select>
+        </div>
+
+        <!-- Origen -->
+        <div class="form-group">
+          <label for="sel-origen">Origen</label>
+          <select id="sel-origen" disabled>
+            <option value="">— Seleccioná Tipo Origen —</option>
+          </select>
+        </div>
+
+        <!-- Tipo Destino -->
+        <div class="form-group">
+          <label for="sel-tipo-destino">Tipo de Destino</label>
+          <select id="sel-tipo-destino" disabled>
+            <option value="">— Seleccioná Origen —</option>
+          </select>
+        </div>
+
+        <!-- Destino -->
+        <div class="form-group">
+          <label for="sel-destino">Destino</label>
+          <select id="sel-destino" disabled>
+            <option value="">— Seleccioná Tipo Destino —</option>
+          </select>
+        </div>
+
+        <!-- Tipo Distribución (visible solo para RE / UO) -->
+        <div class="dist-row" id="dist-row">
+          <div class="form-group">
+            <label for="sel-dist">Tipo de Distribución
+              <span class="tooltip">&#9432;
+                <span class="tooltip-text">Solo aplica para destinos RE y UO</span>
+              </span>
+            </label>
+            <select id="sel-dist" disabled>
+              <option value="">— Seleccioná —</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Kilos -->
+        <div class="form-group span-2">
+          <label for="input-kilos">Peso (kg) ⚖️</label>
+          <input type="number" id="input-kilos" placeholder="Ej: 50" min="0.1" step="0.1" disabled />
+          <div class="kilos-hint" id="kilos-hint"></div>
+        </div>
+
+        <!-- Toggle Paquetizados -->
+        <div class="form-group span-2">
+          <label class="checkbox-label">
+            <input type="checkbox" id="check-paquetizados" />
+            <span>📦 Paquetizados (opcional)</span>
+          </label>
+        </div>
+
+        <!-- Dimensiones (ocultas por defecto) -->
+        <div id="dimensiones-container" class="dimensiones-hidden">
+          <div class="form-group">
+            <label for="input-alto">Alto (m) 📏</label>
+            <input type="number" id="input-alto" placeholder="0.5" min="0.01" step="0.01" disabled />
+          </div>
+          <div class="form-group">
+            <label for="input-ancho">Ancho (m) 📏</label>
+            <input type="number" id="input-ancho" placeholder="0.5" min="0.01" step="0.01" disabled />
+          </div>
+          <div class="form-group">
+            <label for="input-largo">Largo (m) 📏</label>
+            <input type="number" id="input-largo" placeholder="0.5" min="0.01" step="0.01" disabled />
+          </div>
+        </div>
+
+        <!-- Resultados de Paquetizados (ocultos por defecto) -->
+        <div id="paquetizados-resultados" class="paquetizados-hidden">
+          <div class="readonly-field">
+            <label>Volumen (m³) 📦</label>
+            <div class="readonly-value" id="valor-volumen">—</div>
+          </div>
+          <div class="readonly-field">
+            <label>Peso volumétrico (kg) 🧮</label>
+            <div class="readonly-value" id="valor-peso-vol">—</div>
+          </div>
+          <div class="readonly-field">
+            <label>Peso cobrable (kg) ✅</label>
+            <div class="readonly-value" id="valor-peso-cobrable">—</div>
+          </div>
+        </div>
+
+      </div><!-- /form-grid -->
+
+      <div class="section-sep"></div>
+
+      <!-- Botón -->
+      <button class="btn-calcular" id="btn-calcular" disabled onclick="calcular()">
+        Calcular tarifa
+      </button>
+    </div>
+  </div>
+
+  <!-- ── CARD 3: RESULTADO ───────────────────────────────── -->
+  <div class="card" id="resultado-card">
+    <div class="card-header">
+      <div class="card-header-dot" id="result-dot" style="background:var(--accent)"></div>
+      <h2>Resultado</h2>
+    </div>
+    <div class="card-body" id="resultado-body">
+      <!-- Se rellena dinámicamente -->
+    </div>
+  </div>
+
+</div><!-- /wrapper -->
+
+<!-- ── FOOTER ──────────────────────────────────────────── -->
+<div class="app-footer">
+  COTIZADOR DE TRANSPORTE · Procesado 100% en el navegador · Sin backend
+</div>
+
+<!-- ================================================================
+     JAVASCRIPT
+================================================================ -->
+<script>
+/* ----------------------------------------------------------------
+   ESTADO GLOBAL
+---------------------------------------------------------------- */
+let tarifasData  = [];   // filas del Excel (array de objetos)
+let weightCols   = [];   // columnas de rango de peso: [{ header, min, max }, ...]
+let rawHeaders   = [];   // todos los headers del Excel
+
+// Factor volumétrico MKS (terrestre): 1 m³ = 350 kg
+const FACTOR_VOLUMETRICO = 350;
+
+/* ----------------------------------------------------------------
+   UTILIDADES
+---------------------------------------------------------------- */
+
+/**
+ * Limpia un string: quita espacios y normaliza.
+ */
+function clean(v) {
+  return String(v ?? '').trim();
+}
+
+/**
+ * Parsea un header de rango de peso como "11 - 20" o "41-45"
+ * Devuelve { min, max } o null si no es rango.
+ */
+function parseWeightHeader(h) {
+  const s = clean(h).replace(/\s+/g, '');          // "11-20"
+  const m = s.match(/^(\d+(?:[.,]\d+)?)-(\d+(?:[.,]\d+)?)$/);
+  if (!m) return null;
+  return {
+    min: parseFloat(m[1].replace(',', '.')),
+    max: parseFloat(m[2].replace(',', '.'))
+  };
+}
+
+/**
+ * Convierte valor tipo "$1.250,50" o "1250.50" a número.
+ */
+function parseMoney(v) {
+  if (v === null || v === undefined || v === '') return NaN;
+  const s = String(v)
+    .replace(/\$/g, '')
+    .replace(/\./g, '')    // quitar puntos de miles
+    .replace(',', '.')     // coma decimal a punto
+    .trim();
+  return parseFloat(s);
+}
+
+/**
+ * Formatea número como moneda ARS: $XX.XXX,XX
+ */
+function formatARS(n) {
+  if (isNaN(n)) return '—';
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: 2
+  }).format(n);
+}
+
+/**
+ * Devuelve valores únicos de un array, ordenados.
+ */
+function unique(arr) {
+  return [...new Set(arr.filter(v => v !== '' && v !== null && v !== undefined))]
+    .map(String)
+    .sort((a, b) => a.localeCompare(b, 'es'));
+}
+
+/* ----------------------------------------------------------------
+   LECTURA DEL EXCEL
+---------------------------------------------------------------- */
+
+const fileInput    = document.getElementById('file-input');
+const uploadZone   = document.getElementById('upload-zone');
+const uploadLoaded = document.getElementById('upload-loaded');
+const uploadFname  = document.getElementById('upload-filename');
+const uploadMeta   = document.getElementById('upload-meta');
+const fileStatusBar= document.getElementById('file-status-bar');
+const fileStatusTxt= document.getElementById('file-status-text');
+
+// Drag & Drop
+uploadZone.addEventListener('dragover',  e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+});
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) processFile(fileInput.files[0]);
+});
+
+function processFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb    = XLSX.read(e.target.result, { type: 'array' });
+      const ws    = wb.Sheets[wb.SheetNames[0]];
+      // Leer como array de arrays para detectar headers manualmente
+      const aoa   = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+      if (aoa.length < 2) {
+        alert('El archivo parece estar vacío o no tiene datos.');
+        return;
+      }
+
+      rawHeaders = aoa[0].map(clean);  // primera fila = headers
+      const rows = aoa.slice(1);       // resto = datos
+
+      // Convertir a objetos usando los headers
+      tarifasData = rows
+        .filter(r => r.some(c => c !== ''))  // descartar filas vacías
+        .map(row => {
+          const obj = {};
+          rawHeaders.forEach((h, i) => { obj[h] = clean(row[i]); });
+          return obj;
+        });
+
+      // Detectar columnas de peso (headers que son rangos numéricos)
+      weightCols = rawHeaders
+        .map(h => ({ header: h, ...parseWeightHeader(h) }))
+        .filter(c => c.min !== undefined && c.max !== undefined);
+
+      // Mostrar estado
+      uploadZone.style.display   = 'none';
+      uploadLoaded.style.display = 'flex';
+      uploadFname.textContent    = file.name;
+      uploadMeta.textContent     = `${tarifasData.length} filas de tarifa · ${weightCols.length} rangos de peso detectados`;
+      fileStatusBar.classList.add('visible');
+      fileStatusTxt.textContent  = `${weightCols.length} rangos de peso: ${weightCols[0]?.header} → ${weightCols[weightCols.length-1]?.header}`;
+
+      // Poblar dropdowns
+      populateTipoOrigen();
+
+    } catch (err) {
+      console.error(err);
+      alert('Error al leer el Excel. Verificá que el formato sea .xlsx o .xls.');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function resetFile() {
+  tarifasData  = [];
+  weightCols   = [];
+  rawHeaders   = [];
+  uploadZone.style.display   = '';
+  uploadLoaded.style.display = 'none';
+  fileStatusBar.classList.remove('visible');
+  fileInput.value = '';
+
+  // Reset dropdowns
+  resetSelect('sel-tipo-origen', '— Cargá un Excel primero —');
+  resetSelect('sel-origen',      '— Seleccioná Tipo Origen —');
+  resetSelect('sel-tipo-destino','— Seleccioná Origen —');
+  resetSelect('sel-destino',     '— Seleccioná Tipo Destino —');
+  resetSelect('sel-dist',        '— Seleccioná —');
+  document.getElementById('input-kilos').value   = '';
+  document.getElementById('input-kilos').disabled = true;
+  document.getElementById('kilos-hint').textContent = '';
+  document.getElementById('dist-row').classList.remove('visible');
+  ocultarResultado();
+  document.getElementById('btn-calcular').disabled = true;
+}
+
+function resetSelect(id, placeholder, disable = true) {
+  const sel = document.getElementById(id);
+  sel.innerHTML = `<option value="">${placeholder}</option>`;
+  sel.disabled  = disable;
+  sel.value     = '';
+}
+
+/* ----------------------------------------------------------------
+   POBLAR DROPDOWNS EN CASCADA
+---------------------------------------------------------------- */
+
+/**
+ * Retorna el header real del Excel para un campo dado.
+ * Busca de forma flexible (case-insensitive, sin espacios).
+ */
+function getHeaderKey(candidates) {
+  for (const c of candidates) {
+    const found = rawHeaders.find(
+      h => h.toLowerCase().replace(/\s+/g,'') === c.toLowerCase().replace(/\s+/g,'')
+    );
+    if (found) return found;
+  }
+  return null;
+}
+
+// Claves detectadas dinámicamente al leer el Excel
+let KEY_TIPO_ORIGEN  = null;
+let KEY_ORIGEN       = null;
+let KEY_TIPO_DESTINO = null;
+let KEY_DESTINO      = null;
+let KEY_TIPO_DIST    = null;
+let KEY_EXCEDENTE    = null;
+
+function detectKeys() {
+  KEY_TIPO_ORIGEN  = getHeaderKey(['Tipo origen','TipoOrigen','Tipo_origen','Origen tipo','tipo origen']);
+  KEY_ORIGEN       = getHeaderKey(['Origen','origen']);
+  KEY_TIPO_DESTINO = getHeaderKey(['TipoDestino','Tipo destino','TipoDestino','tipo_destino','tipo destino']);
+  KEY_DESTINO      = getHeaderKey(['Destino','destino']);
+  KEY_TIPO_DIST    = getHeaderKey(['Tipo distribución','Tipo distribucion','TipoDistribucion','tipo distribucion','Tipo_distribucion','Tipo distribución']);
+  KEY_EXCEDENTE    = getHeaderKey(['Excedente','excedente','Excedentes','excedentes']);
+}
+
+function populateTipoOrigen() {
+  detectKeys();
+
+  if (!KEY_TIPO_ORIGEN || !KEY_ORIGEN) {
+    alert('No se encontraron columnas "Tipo origen" u "Origen" en el Excel. Verificá los encabezados.');
+    return;
+  }
+
+  const valores = unique(tarifasData.map(r => r[KEY_TIPO_ORIGEN]));
+  fillSelect('sel-tipo-origen', valores, '— Seleccioná —');
+  document.getElementById('sel-tipo-origen').disabled = false;
+
+  // Reset cascada
+  resetSelect('sel-origen',      '— Seleccioná Tipo Origen —');
+  resetSelect('sel-tipo-destino','— Seleccioná Origen —');
+  resetSelect('sel-destino',     '— Seleccioná Tipo Destino —');
+  resetSelect('sel-dist',        '— Seleccioná —');
+}
+
+document.getElementById('sel-tipo-origen').addEventListener('change', function() {
+  const tipoOrigen = this.value;
+
+  resetSelect('sel-origen',      '— Seleccioná —');
+  resetSelect('sel-tipo-destino','— Seleccioná Origen —');
+  resetSelect('sel-destino',     '— Seleccioná Tipo Destino —');
+  resetSelect('sel-dist',        '— Seleccioná —');
+  document.getElementById('dist-row').classList.remove('visible');
+  ocultarResultado();
+
+  if (!tipoOrigen) return;
+
+  const filtrados = tarifasData.filter(r => r[KEY_TIPO_ORIGEN] === tipoOrigen);
+  const origenes  = unique(filtrados.map(r => r[KEY_ORIGEN]));
+  fillSelect('sel-origen', origenes, '— Seleccioná —');
+  document.getElementById('sel-origen').disabled = false;
+});
+
+document.getElementById('sel-origen').addEventListener('change', function() {
+  const tipoOrigen = document.getElementById('sel-tipo-origen').value;
+  const origen     = this.value;
+
+  resetSelect('sel-tipo-destino','— Seleccioná —');
+  resetSelect('sel-destino',     '— Seleccioná Tipo Destino —');
+  resetSelect('sel-dist',        '— Seleccioná —');
+  document.getElementById('dist-row').classList.remove('visible');
+  ocultarResultado();
+
+  if (!origen) return;
+
+  const filtrados   = tarifasData.filter(r =>
+    r[KEY_TIPO_ORIGEN] === tipoOrigen &&
+    r[KEY_ORIGEN]      === origen
+  );
+  const tiposDestino = unique(filtrados.map(r => r[KEY_TIPO_DESTINO]));
+  fillSelect('sel-tipo-destino', tiposDestino, '— Seleccioná —');
+  document.getElementById('sel-tipo-destino').disabled = false;
+});
+
+document.getElementById('sel-tipo-destino').addEventListener('change', function() {
+  const tipoOrigen  = document.getElementById('sel-tipo-origen').value;
+  const origen      = document.getElementById('sel-origen').value;
+  const tipoDestino = this.value;
+
+  resetSelect('sel-destino', '— Seleccioná —');
+  resetSelect('sel-dist',    '— Seleccioná —');
+  document.getElementById('dist-row').classList.remove('visible');
+  ocultarResultado();
+
+  if (!tipoDestino) return;
+
+  // Mostrar/ocultar Tipo Distribución
+  const necesitaDist = (tipoDestino === 'RE' || tipoDestino === 'UO');
+  document.getElementById('dist-row').classList.toggle('visible', necesitaDist);
+
+  const filtrados = tarifasData.filter(r =>
+    r[KEY_TIPO_ORIGEN]  === tipoOrigen &&
+    r[KEY_ORIGEN]       === origen &&
+    r[KEY_TIPO_DESTINO] === tipoDestino
+  );
+
+  const destinos = unique(filtrados.map(r => r[KEY_DESTINO]));
+  fillSelect('sel-destino', destinos, '— Seleccioná —');
+  document.getElementById('sel-destino').disabled = false;
+
+  // Poblar distribución si aplica
+  if (necesitaDist && KEY_TIPO_DIST) {
+    const dists = unique(filtrados.map(r => r[KEY_TIPO_DIST]));
+    fillSelect('sel-dist', dists, '— Seleccioná —');
+    document.getElementById('sel-dist').disabled = false;
+  }
+});
+
+document.getElementById('sel-destino').addEventListener('change', function() {
+  if (!this.value) return;
+  habilitarKilos();
+  ocultarResultado();
+});
+
+document.getElementById('sel-dist').addEventListener('change', function() {
+  ocultarResultado();
+});
+
+function habilitarKilos() {
+  const kilosInput = document.getElementById('input-kilos');
+  kilosInput.disabled = false;
+  kilosInput.focus();
+
+  if (weightCols.length) {
+    const min = weightCols[0].min;
+    const max = weightCols[weightCols.length - 1].max;
+    document.getElementById('kilos-hint').textContent =
+      `Rango disponible: ${min} kg — ${max} kg`;
+  }
+  document.getElementById('btn-calcular').disabled = false;
+}
+
+/* ----------------------------------------------------------------
+   HELPERS DROPDOWN
+---------------------------------------------------------------- */
+function fillSelect(id, values, placeholder) {
+  const sel = document.getElementById(id);
+  sel.innerHTML = `<option value="">${placeholder}</option>`;
+  values.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value       = v;
+    opt.textContent = v;
+    sel.appendChild(opt);
+  });
+  sel.disabled = false;
+}
+
+/* ----------------------------------------------------------------
+   CÁLCULO PRINCIPAL
+---------------------------------------------------------------- */
+function calcular() {
+  // Leer inputs
+  const tipoOrigen  = document.getElementById('sel-tipo-origen').value;
+  const origen      = document.getElementById('sel-origen').value;
+  const tipoDestino = document.getElementById('sel-tipo-destino').value;
+  const destino     = document.getElementById('sel-destino').value;
+  const dist        = document.getElementById('sel-dist').value;
+  const kilosRaw    = document.getElementById('input-kilos').value;
+  const kilos       = parseFloat(kilosRaw);
+
+  // Validar obligatorios
+  if (!tipoOrigen || !origen || !tipoDestino || !destino) {
+    mostrarError('Completá todos los campos requeridos antes de calcular.');
+    return;
+  }
+  if (isNaN(kilos) || kilos <= 0) {
+    mostrarError('Ingresá un peso válido mayor a 0 kg.');
+    return;
+  }
+
+  // Validar paquetizados si está activado
+  const checkbox = document.getElementById('check-paquetizados');
+  if (checkbox.checked) {
+    const alto = parseFloat(document.getElementById('input-alto').value || 0);
+    const ancho = parseFloat(document.getElementById('input-ancho').value || 0);
+    const largo = parseFloat(document.getElementById('input-largo').value || 0);
+
+    if (alto <= 0 || ancho <= 0 || largo <= 0) {
+      mostrarError('Completá todas las dimensiones (Alto, Ancho, Largo) antes de calcular.');
+      return;
+    }
+  }
+
+  const necesitaDist = (tipoDestino === 'RE' || tipoDestino === 'UO');
+  if (necesitaDist && KEY_TIPO_DIST && !dist) {
+    mostrarError('Seleccioná el Tipo de Distribución para destinos RE / UO.');
+    return;
+  }
+
+  // ── OBTENER PESO PARA COTIZAR ──────────────────────────────
+  const infoPeso = obtenerPesoParaCotizar();
+  const pesoCotizacion = infoPeso.peso;
+
+  // ── PASO 1: Filtrar la fila correcta ─────────────────────
+  let filasFiltradas = tarifasData.filter(r =>
+    r[KEY_TIPO_ORIGEN]  === tipoOrigen &&
+    r[KEY_ORIGEN]       === origen &&
+    r[KEY_TIPO_DESTINO] === tipoDestino &&
+    r[KEY_DESTINO]      === destino
+  );
+
+  if (necesitaDist && KEY_TIPO_DIST && dist) {
+    filasFiltradas = filasFiltradas.filter(r => r[KEY_TIPO_DIST] === dist);
+  }
+
+  if (filasFiltradas.length === 0) {
+    mostrarError(
+      'No existe tarifa para esta combinación.',
+      `Origen: ${origen} · Destino: ${destino} · Tipo: ${tipoDestino}${necesitaDist ? ' · ' + dist : ''}`
+    );
+    return;
+  }
+
+  const fila = filasFiltradas[0];
+
+  // ── PASO 2: Encontrar la columna de peso ──────────────────
+  // Verificar si peso supera 1000 kg
+  if (pesoCotizacion > 1000) {
+    // ── CÁLCULO POR EXCEDENTE ──────────────────────────────
+    const pesoBase = 1000;
+    const excedente_kg = pesoCotizacion - pesoBase;
+
+    // Buscar la columna correspondiente a 1000 kg (o la más cercana por debajo)
+    const columnaBase = weightCols.filter(c => c.max <= pesoBase).pop();
+    
+    if (!columnaBase) {
+      mostrarError(
+        'No se puede calcular tarifa para este peso.',
+        'No hay rango disponible hasta 1000 kg.'
+      );
+      return;
+    }
+
+    // Obtener costo base (1000 kg)
+    const valorBaseRaw = fila[columnaBase.header];
+    const tarifaBase = parseMoney(valorBaseRaw);
+
+    if (isNaN(tarifaBase)) {
+      mostrarError(
+        'El valor de tarifa base encontrado no es un número válido.',
+        `Valor en Excel: "${valorBaseRaw}"`
+      );
+      return;
+    }
+
+    // Obtener valor de excedente
+    if (!KEY_EXCEDENTE) {
+      mostrarError(
+        'No se encontró la columna "Excedente" para calcular sobrepeso.',
+        'El Excel debe incluir una columna llamada "Excedente".'
+      );
+      return;
+    }
+
+    const valorExcedentesRaw = fila[KEY_EXCEDENTE];
+    const valorExcedente = parseMoney(valorExcedentesRaw);
+
+    if (isNaN(valorExcedente)) {
+      mostrarError(
+        'El valor de excedente encontrado no es un número válido.',
+        `Valor en Excel: "${valorExcedentesRaw}"`
+      );
+      return;
+    }
+
+    // Calcular tarifa total: base + (excedente_kg × valor_excedente)
+    const tarifaExcedente = excedente_kg * valorExcedente;
+    const tarifaTotal = tarifaBase + tarifaExcedente;
+
+    // ── MOSTRAR RESULTADO CON DETALLES DE EXCEDENTE ─────────
+    mostrarResultado({
+      tarifa: tarifaTotal,
+      tarifaBase: tarifaBase,
+      tarifaExcedente: tarifaExcedente,
+      excedente_kg: excedente_kg,
+      valorExcedente: valorExcedente,
+      rangoAplicado: columnaBase.header,
+      tipoOrigen,
+      origen,
+      tipoDestino,
+      destino,
+      dist:         necesitaDist ? dist : null,
+      kilos: kilos,
+      pesoCotizacion: pesoCotizacion,
+      esPaquetizados: checkbox.checked,
+      esVolumetrico: infoPeso.esVolumetrico,
+      conExcedente: true
+    });
+    return;
+  }
+
+  // ── BÚSQUEDA NORMAL DE RANGO (peso <= 1000 kg) ──────────
+  const columnaRango = weightCols.find(c => pesoCotizacion >= c.min && pesoCotizacion <= c.max);
+
+  if (!columnaRango) {
+    mostrarError(
+      `No hay rango de peso para ${pesoCotizacion.toFixed(2)} kg.`,
+      `Los rangos disponibles son: ${weightCols[0]?.header} hasta ${weightCols[weightCols.length-1]?.header}`
+    );
+    return;
+  }
+
+  // ── PASO 3: Obtener el valor ──────────────────────────────
+  const valorRaw = fila[columnaRango.header];
+  const tarifa   = parseMoney(valorRaw);
+
+  if (isNaN(tarifa)) {
+    mostrarError(
+      'El valor de tarifa encontrado no es un número válido.',
+      `Valor en Excel: "${valorRaw}"`
+    );
+    return;
+  }
+
+  // ── MOSTRAR RESULTADO ─────────────────────────────────────
+  mostrarResultado({
+    tarifa,
+    rangoAplicado: columnaRango.header,
+    tipoOrigen,
+    origen,
+    tipoDestino,
+    destino,
+    dist:         necesitaDist ? dist : null,
+    kilos: kilos,
+    pesoCotizacion: pesoCotizacion,
+    esPaquetizados: checkbox.checked,
+    esVolumetrico: infoPeso.esVolumetrico,
+    conExcedente: false
+  });
+}
+
+/* ----------------------------------------------------------------
+   RENDER DE RESULTADOS
+---------------------------------------------------------------- */
+function mostrarResultado(data) {
+  const card = document.getElementById('resultado-card');
+  const body = document.getElementById('resultado-body');
+  const dot  = document.getElementById('result-dot');
+
+  dot.style.background  = 'var(--accent)';
+  dot.style.boxShadow   = '0 0 6px var(--accent-glow)';
+
+  // Armar línea de combinación
+  const partes = [data.origen, `${data.tipoDestino}: ${data.destino}`];
+  if (data.dist) partes.push(data.dist);
+  partes.push(`${data.pesoCotizacion} kg`);
+  const combo = partes.join(' · ');
+
+  // Determinar etiqueta del peso usado
+  let etiquetaPeso = 'Peso ingresado';
+  if (data.esPaquetizados) {
+    etiquetaPeso = data.esVolumetrico ? 'Peso volumétrico' : 'Peso real (mayor)';
+  }
+
+  // Sección de desglose de excedente (si aplica)
+  const seccionExcedente = data.conExcedente ? `
+    <div style="background:var(--surface-2); border:1px solid var(--border-light); border-radius:var(--radius); padding:14px; margin-top:12px;">
+      <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.6px; color:var(--text-3); margin-bottom:8px;">Desglose de cálculo</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div style="font-size:12px; color:var(--text-2);">
+          Costo base (1000 kg):<br/>
+          <span style="color:var(--accent); font-weight:600;">${formatARS(data.tarifaBase)}</span>
+        </div>
+        <div style="font-size:12px; color:var(--text-2);">
+          Excedente: ${data.excedente_kg.toFixed(2)} kg<br/>
+          <span style="color:var(--text-3); font-size:11px;">@ ${formatARS(data.valorExcedente)}/kg</span>
+        </div>
+        <div style="font-size:12px; color:var(--text-2); grid-column:1/-1;">
+          Costo adicional:<br/>
+          <span style="color:var(--accent); font-weight:600;">${formatARS(data.tarifaExcedente)}</span>
+        </div>
+      </div>
+    </div>
+  ` : '';
+
+  body.innerHTML = `
+    <div class="result-ok">
+      <div class="result-main">
+        <div class="result-tarifa-block">
+          <div class="result-tarifa-label">Tarifa Total</div>
+          <div class="result-tarifa-value">${formatARS(data.tarifa)}</div>
+        </div>
+        <div class="result-details">
+          <div class="result-detail-item">
+            <span class="result-detail-label">Peso usado para cotizar</span>
+            <span class="result-detail-value">${data.pesoCotizacion.toFixed(2)} kg (${etiquetaPeso})</span>
+          </div>
+          <div class="result-detail-item">
+            <span class="result-detail-label">Rango de peso aplicado</span>
+            <span class="result-detail-value">${data.rangoAplicado} kg</span>
+          </div>
+          <div class="result-detail-item">
+            <span class="result-detail-label">Tipo Destino</span>
+            <span class="result-detail-value">${data.tipoDestino}</span>
+          </div>
+          <div class="result-detail-item">
+            <span class="result-detail-label">Peso ingresado</span>
+            <span class="result-detail-value">${data.kilos} kg</span>
+          </div>
+          ${data.dist ? `
+          <div class="result-detail-item">
+            <span class="result-detail-label">Distribución</span>
+            <span class="result-detail-value">${data.dist}</span>
+          </div>` : ''}
+        </div>
+      </div>
+
+      ${seccionExcedente}
+
+      <div class="result-combo">
+        <span class="combo-label">Combinación</span>
+        <span class="combo-value">
+          ${data.tipoOrigen}
+          <span class="combo-sep">·</span>
+          ${data.origen}
+          <span class="combo-sep">·</span>
+          ${data.tipoDestino}: ${data.destino}
+          ${data.dist ? `<span class="combo-sep">·</span>${data.dist}` : ''}
+          <span class="combo-sep">·</span>
+          ${data.pesoCotizacion.toFixed(2)} kg
+        </span>
+      </div>
+    </div>
+  `;
+
+  card.classList.add('visible');
+  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function mostrarError(titulo, subtitulo = '') {
+  const card = document.getElementById('resultado-card');
+  const body = document.getElementById('resultado-body');
+  const dot  = document.getElementById('result-dot');
+
+  dot.style.background = 'var(--warn)';
+  dot.style.boxShadow  = '0 0 6px rgba(255,107,53,.5)';
+
+  body.innerHTML = `
+    <div class="result-error-box">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+           stroke="#ff6b35" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>
+        <div class="result-error-title">${titulo}</div>
+        ${subtitulo ? `<div class="result-error-sub">${subtitulo}</div>` : ''}
+      </div>
+    </div>
+  `;
+
+  card.classList.add('visible');
+  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function ocultarResultado() {
+  const card = document.getElementById('resultado-card');
+  card.classList.remove('visible');
+}
+
+/* ================================================================
+   PAQUETIZADOS - FUNCIONES
+================================================================ */
+
+/**
+ * Calcula volumen, peso volumétrico y peso cobrable en vivo
+ */
+function actualizarPaquetizados() {
+  const checkbox = document.getElementById('check-paquetizados');
+  if (!checkbox.checked) return;
+
+  const alto  = parseFloat(document.getElementById('input-alto').value || 0);
+  const ancho = parseFloat(document.getElementById('input-ancho').value || 0);
+  const largo = parseFloat(document.getElementById('input-largo').value || 0);
+  const pesoReal = parseFloat(document.getElementById('input-kilos').value || 0);
+
+  // Validar que las dimensiones estén completas
+  if (alto <= 0 || ancho <= 0 || largo <= 0) {
+    document.getElementById('valor-volumen').textContent = '—';
+    document.getElementById('valor-peso-vol').textContent = '—';
+    document.getElementById('valor-peso-cobrable').textContent = '—';
+    return;
+  }
+
+  // Calcular volumen (m³)
+  const volumen = alto * ancho * largo;
+
+  // Calcular peso volumétrico (m³ × 350 kg/m³)
+  const pesoVolumetrico = volumen * FACTOR_VOLUMETRICO;
+
+  // Calcular peso cobrable (máximo entre peso real y volumétrico)
+  const pesoCobrable = pesoReal > 0 ? Math.max(pesoReal, pesoVolumetrico) : pesoVolumetrico;
+
+  // Mostrar valores
+  document.getElementById('valor-volumen').textContent = volumen.toFixed(4);
+  document.getElementById('valor-peso-vol').textContent = pesoVolumetrico.toFixed(2);
+  document.getElementById('valor-peso-cobrable').textContent = pesoCobrable.toFixed(2);
+}
+
+/**
+ * Obtiene el peso a usar para la cotización
+ */
+function obtenerPesoParaCotizar() {
+  const checkbox = document.getElementById('check-paquetizados');
+  
+  if (!checkbox.checked) {
+    // Modo normal: usar peso real
+    const pesoReal = parseFloat(document.getElementById('input-kilos').value || 0);
+    return {
+      peso: pesoReal,
+      esVolumetrico: false,
+      pesoCobrable: pesoReal
+    };
+  }
+
+  // Modo paquetizados: usar peso cobrable
+  const pesoCobrable = parseFloat(document.getElementById('valor-peso-cobrable').textContent || 0);
+  const pesoReal = parseFloat(document.getElementById('input-kilos').value || 0);
+
+  return {
+    peso: pesoCobrable,
+    esVolumetrico: pesoCobrable > pesoReal,
+    pesoCobrable: pesoCobrable
+  };
+}
+
+/* ================================================================
+   EVENT LISTENERS - PAQUETIZADOS
+================================================================ */
+
+document.getElementById('check-paquetizados').addEventListener('change', function() {
+  const containerDim = document.getElementById('dimensiones-container');
+  const containerRes = document.getElementById('paquetizados-resultados');
+  const inputsAltAncLar = [
+    document.getElementById('input-alto'),
+    document.getElementById('input-ancho'),
+    document.getElementById('input-largo')
+  ];
+
+  if (this.checked) {
+    // Mostrar inputs de dimensiones
+    containerDim.classList.remove('dimensiones-hidden');
+    containerRes.classList.remove('paquetizados-hidden');
+    
+    // Habilitar los inputs
+    inputsAltAncLar.forEach(inp => inp.disabled = false);
+  } else {
+    // Ocultar inputs de dimensiones
+    containerDim.classList.add('dimensiones-hidden');
+    containerRes.classList.add('paquetizados-hidden');
+    
+    // Deshabilitar los inputs y limpiar
+    inputsAltAncLar.forEach(inp => {
+      inp.disabled = true;
+      inp.value = '';
+    });
+    
+    // Limpiar valores mostrados
+    document.getElementById('valor-volumen').textContent = '—';
+    document.getElementById('valor-peso-vol').textContent = '—';
+    document.getElementById('valor-peso-cobrable').textContent = '—';
+  }
+
+  ocultarResultado();
+});
+
+// Event listeners para actualizar en vivo los cálculos de paquetizados
+['input-alto', 'input-ancho', 'input-largo', 'input-kilos'].forEach(id => {
+  document.getElementById(id).addEventListener('input', function() {
+    const checkbox = document.getElementById('check-paquetizados');
+    if (checkbox.checked) {
+      actualizarPaquetizados();
+    }
+  });
+});
+
+/* ----------------------------------------------------------------
+   CALCULAR CON ENTER
+---------------------------------------------------------------- */
+document.getElementById('input-kilos').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') calcular();
+});
+</script>
+
+</body>
+</html>
