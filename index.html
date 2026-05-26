@@ -7,34 +7,37 @@
 
   <!-- SheetJS para leer Excel -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  
+  <!-- html2pdf para exportar a PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet" />
 
   <style>
     /* =========================================================
        VARIABLES Y RESET
     ========================================================= */
     :root {
-      --bg:           #0c0f14;
-      --surface:      #141820;
-      --surface-2:    #1c2230;
-      --border:       #252d3a;
-      --border-light: #2e3a4e;
-      --accent:       #00e5a0;
-      --accent-dim:   rgba(0,229,160,.12);
-      --accent-glow:  rgba(0,229,160,.35);
-      --warn:         #ff6b35;
-      --text-1:       #e8edf5;
-      --text-2:       #8a96a8;
-      --text-3:       #4d5a6e;
-      --mono:         'DM Mono', monospace;
-      --sans:         'DM Sans', sans-serif;
-      --display:      'Syne', sans-serif;
-      --radius:       10px;
-      --radius-lg:    16px;
+      --bg:           #f8f9fb;
+      --surface:      #ffffff;
+      --surface-2:    #f3f4f8;
+      --border:       #e0e3ed;
+      --border-light: #eff1f8;
+      --accent:       #2563eb;
+      --accent-dim:   rgba(37,99,235,.08);
+      --accent-glow:  rgba(37,99,235,.25);
+      --warn:         #dc2626;
+      --text-1:       #1a202c;
+      --text-2:       #6b7280;
+      --text-3:       #9ca3af;
+      --mono:         'Fira Code', monospace;
+      --sans:         'Inter', sans-serif;
+      --display:      'Plus Jakarta Sans', sans-serif;
+      --radius:       8px;
+      --radius-lg:    12px;
       --transition:   .2s cubic-bezier(.4,0,.2,1);
     }
 
@@ -47,22 +50,26 @@
       font-size: 14px;
       line-height: 1.6;
       min-height: 100vh;
-      /* Fondo con patrón de puntos */
-      background-image:
-        radial-gradient(circle at 20% 10%, rgba(0,229,160,.05) 0%, transparent 40%),
-        radial-gradient(circle at 80% 80%, rgba(0,229,160,.04) 0%, transparent 35%),
-        radial-gradient(var(--border) 1px, transparent 1px);
-      background-size: 100% 100%, 100% 100%, 28px 28px;
+      /* Fondo sutil con gradiente */
+      background-image: linear-gradient(135deg, #f8f9fb 0%, #f0f3ff 100%);
     }
 
     /* =========================================================
        LAYOUT
     ========================================================= */
     .wrapper {
-      max-width: 860px;
+      max-width: 1400px;
       margin: 0 auto;
       padding: 40px 24px 80px;
+      display: grid;
+      grid-template-columns: 1fr 1.2fr;
+      gap: 32px;
     }
+    .wrapper > .app-header { grid-column: 1 / -1; }
+    .left-panel { display: flex; flex-direction: column; gap: 24px; }
+    #card-upload { grid-column: auto; grid-row: auto; }
+    #card-form { grid-column: auto; grid-row: auto; }
+    #resultado-card { position: sticky; top: 40px; }
 
     /* =========================================================
        HEADER
@@ -74,22 +81,19 @@
       margin-bottom: 40px;
     }
     .header-icon {
-      width: 52px; height: 52px;
-      background: var(--accent-dim);
-      border: 1px solid var(--accent-glow);
-      border-radius: var(--radius);
+      width: auto; height: 48px;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
-      position: relative;
-      overflow: hidden;
+      background: var(--accent);
+      padding: 8px 16px;
+      border-radius: var(--radius);
+      border: 1px solid var(--accent);
     }
-    .header-icon::before {
-      content: '';
-      position: absolute; inset: 0;
-      background: linear-gradient(135deg, var(--accent-glow), transparent);
-      opacity: .4;
+    .header-icon svg {
+      height: 100%;
+      width: auto;
+      max-width: 180px;
     }
-    .header-icon svg { position: relative; z-index: 1; }
     .header-text h1 {
       font-family: var(--display);
       font-size: 26px;
@@ -126,7 +130,8 @@
       border-radius: var(--radius-lg);
       overflow: hidden;
     }
-    .card + .card { margin-top: 20px; }
+    .card + .card { margin-top: 0; }
+    .card.sticky { position: sticky; top: 40px; }
 
     .card-header {
       display: flex;
@@ -323,7 +328,7 @@
     /* =========================================================
        RESULTADO
     ========================================================= */
-    #resultado-card { display: none; }
+    #resultado-card { display: none; max-height: calc(100vh - 160px); overflow-y: auto; }
     #resultado-card.visible { display: block; }
 
     .result-ok { }
@@ -471,11 +476,11 @@
     /* =========================================================
        RESPONSIVE
     ========================================================= */
-    @media (max-width: 600px) {
-      .form-grid { grid-template-columns: 1fr; }
-      .dist-row.visible { flex-direction: column; }
-      .result-main { flex-direction: column; }
-      .result-tarifa-block { width: 100%; }
+    @media (max-width: 1200px) {
+      .wrapper {
+        grid-template-columns: 1fr;
+      }
+      #resultado-card { position: static; }
     }
 
     /* =========================================================
@@ -558,12 +563,58 @@
     }
 
     /* =========================================================
+       BOTÓN EXPORTAR PDF
+    ========================================================= */
+    .btn-exportar-pdf {
+      display: none;
+      width: 100%;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-family: var(--display);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      margin-top: 16px;
+    }
+    .btn-exportar-pdf:hover {
+      box-shadow: 0 4px 16px rgba(37,99,235,.3);
+      transform: translateY(-2px);
+    }
+    .btn-exportar-pdf:active {
+      transform: translateY(0);
+    }
+    #resultado-card.visible .btn-exportar-pdf {
+      display: block;
+    }
+
+    /* =========================================================
        FOOTER
     ========================================================= */
     .app-footer {
       text-align: center; margin-top: 48px;
       font-size: 11px; color: var(--text-3);
       font-family: var(--mono); letter-spacing: .4px;
+      grid-column: 1 / -1;
+    }
+
+    /* =========================================================
+       RESPONSIVE
+    ========================================================= */
+    @media (max-width: 1200px) {
+      .wrapper {
+        grid-template-columns: 1fr;
+      }
+      #resultado-card { position: static; }
+    }
+    @media (max-width: 600px) {
+      .form-grid { grid-template-columns: 1fr; }
+      .dist-row.visible { flex-direction: column; }
+      .result-main { flex-direction: column; }
+      .result-tarifa-block { width: 100%; }
     }
   </style>
 </head>
@@ -574,12 +625,9 @@
   <!-- ── HEADER ─────────────────────────────────────────── -->
   <header class="app-header">
     <div class="header-icon">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-           stroke="#00e5a0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="1" y="3" width="15" height="13" rx="1"/>
-        <path d="M16 8h4l3 5v4h-7V8z"/>
-        <circle cx="5.5" cy="18.5" r="2.5"/>
-        <circle cx="18.5" cy="18.5" r="2.5"/>
+      <svg viewBox="0 0 160 48" xmlns="http://www.w3.org/2000/svg">
+        <rect width="160" height="48" fill="#2563eb" rx="4"/>
+        <text x="12" y="32" font-family="'Plus Jakarta Sans', sans-serif" font-size="20" font-weight="700" fill="white" letter-spacing="-0.5">SPIRAX</text>
       </svg>
     </div>
     <div class="header-text">
@@ -588,8 +636,10 @@
     </div>
   </header>
 
-  <!-- ── CARD 1: CARGAR ARCHIVO ─────────────────────────── -->
-  <div class="card" id="card-upload">
+  <!-- ── PANEL IZQUIERDO: Upload + Formulario ─────────────────── -->
+  <div class="left-panel">
+    <!-- ── CARD 1: CARGAR ARCHIVO ─────────────────────────── -->
+    <div class="card" id="card-upload">
     <div class="card-header">
       <div class="card-header-dot"></div>
       <h2>Fuente de tarifas</h2>
@@ -744,6 +794,7 @@
       </button>
     </div>
   </div>
+  </div><!-- /left-panel -->
 
   <!-- ── CARD 3: RESULTADO ───────────────────────────────── -->
   <div class="card" id="resultado-card">
@@ -754,6 +805,7 @@
     <div class="card-body" id="resultado-body">
       <!-- Se rellena dinámicamente -->
     </div>
+    <button class="btn-exportar-pdf" onclick="exportarPDF()">📥 Descargar como PDF</button>
   </div>
 
 </div><!-- /wrapper -->
@@ -1544,6 +1596,72 @@ document.getElementById('check-paquetizados').addEventListener('change', functio
 document.getElementById('input-kilos').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') calcular();
 });
+
+/* ================================================================
+   EXPORTAR A PDF
+================================================================ */
+function exportarPDF() {
+  const element = document.getElementById('resultado-body');
+  const tipoOrigen = document.getElementById('sel-tipo-origen').value;
+  const origen = document.getElementById('sel-origen').value;
+  const tipoDestino = document.getElementById('sel-tipo-destino').value;
+  const destino = document.getElementById('sel-destino').value;
+
+  const opt = {
+    margin: 10,
+    filename: `cotizacion_${origen}_${destino}_${new Date().getTime()}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2 },
+    jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
+  };
+
+  // Crear un div temporal con los datos formateados
+  const tempDiv = document.createElement('div');
+  tempDiv.style.padding = '20px';
+  tempDiv.style.fontFamily = 'Arial, sans-serif';
+  tempDiv.style.fontSize = '12px';
+  tempDiv.innerHTML = `
+    <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #2563eb; padding-bottom: 15px;">
+      <h1 style="color: #2563eb; margin: 0; font-size: 24px;">SPIRAX SARCO</h1>
+      <h2 style="color: #1a202c; margin: 5px 0; font-size: 18px;">Cotización de Transporte</h2>
+      <p style="color: #6b7280; margin: 5px 0; font-size: 10px;">Generado: ${new Date().toLocaleDateString('es-AR')} ${new Date().toLocaleTimeString('es-AR')}</p>
+    </div>
+
+    <div style="margin-bottom: 20px;">
+      <h3 style="color: #2563eb; font-size: 14px; border-bottom: 1px solid #e0e3ed; padding-bottom: 5px;">DATOS DE LA COTIZACIÓN</h3>
+      <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+        <tr style="background-color: #f3f4f8;">
+          <td style="padding: 8px; border: 1px solid #e0e3ed; font-weight: bold; width: 50%;">Origen</td>
+          <td style="padding: 8px; border: 1px solid #e0e3ed;">${origen}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px; border: 1px solid #e0e3ed; font-weight: bold;">Tipo de Origen</td>
+          <td style="padding: 8px; border: 1px solid #e0e3ed;">${tipoOrigen}</td>
+        </tr>
+        <tr style="background-color: #f3f4f8;">
+          <td style="padding: 8px; border: 1px solid #e0e3ed; font-weight: bold;">Destino</td>
+          <td style="padding: 8px; border: 1px solid #e0e3ed;">${destino}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px; border: 1px solid #e0e3ed; font-weight: bold;">Tipo de Destino</td>
+          <td style="padding: 8px; border: 1px solid #e0e3ed;">${tipoDestino}</td>
+        </tr>
+      </table>
+    </div>
+
+    <div>
+      <h3 style="color: #2563eb; font-size: 14px; border-bottom: 1px solid #e0e3ed; padding-bottom: 5px;">RESULTADO</h3>
+      ${element.innerHTML}
+    </div>
+
+    <div style="margin-top: 30px; padding-top: 15px; border-top: 1px solid #e0e3ed; text-align: center; color: #6b7280; font-size: 10px;">
+      <p>Este documento fue generado automáticamente por el Cotizador de Transporte de Spirax Sarco.</p>
+      <p>Para consultas, contacte al equipo de ventas.</p>
+    </div>
+  `;
+
+  html2pdf().set(opt).from(tempDiv).save();
+}
 </script>
 
 </body>
